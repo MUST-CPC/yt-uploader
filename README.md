@@ -4,12 +4,27 @@ Session recordings live on MUST's SharePoint, this CLI tool gets them to the
 community YouTube channel without burning your home bandwidth and without
 the Entra ID app bureaucracy.
 
+## How it works
+
+You run everything from your PC. After two one-time logins (MUST in a
+browser, Google for YouTube), a single command does the whole job:
+
+```bash
+mustcpc upload "<sharepoint-video-url>" --title "CPC Session 5 - Graphs"
+```
+
+That command extracts a temporary direct download link (DDL) using your
+saved MUST browser session, then drives the VPS over SSH: it downloads the
+video there, uploads it to the community YouTube channel from there, and
+deletes the remote files afterwards. Progress for each step streams live in
+your terminal. Your local internet never touches the video bytes.
+
 ## Why this shape
 
 - MUST blocks logins from most cloud-provider IPs, so SharePoint auth must
-  happen **on your PC** (home IP) via a real browser session.
+  happen on your PC (home IP) via a real browser session.
 - The official Microsoft Graph/Entra route needs app registration, admin
-  consent, and sometimes a credit card. Instead we reuse your browser
+  consent, sometimes a credit card, and it may or may not work. Instead we reuse your browser
   cookies to ask SharePoint for a temporary DDL.
 - The VPS does the heavy lifting: it `wget`s the DDL and uploads to YouTube
   from there. Your PC only exchanges small API calls.
