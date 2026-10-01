@@ -248,6 +248,7 @@ def vps_download(ctx, share_url, filename, no_deploy):
             cfg, uploader, cfg.yt_client_secret_path, cfg.yt_token_path
         )
         click.echo("[2/3] Upload bundle deployed.")
+    click.echo("[3/3] Downloading (live progress below)...")
     remote_video = vps_mod.download_to_vps(cfg, ddl_url, filename)
     click.echo(f"[3/3] Downloaded: {remote_video}")
 
@@ -288,15 +289,8 @@ def upload(ctx, share_url, title, description, privacy, keep_remote):
     if not cfg.yt_token_path.exists():
         raise click.ClickException("Run `mustcpc auth yt-login` first.")
 
-    click.echo("[1/4] Extracting direct download link...")
-    info = full_upload(cfg, share_url, title, description, privacy, keep_remote)
-    click.echo(f"[2/4] Downloaded on VPS: {info['remote_video']}")
-    click.echo(f"[3/4] Uploaded: {info['video_url']}")
-    click.echo(
-        "[4/4] Remote video and uploader venv removed."
-        if not info["kept_remote"]
-        else "[4/4] Remote video and uploader venv kept."
-    )
+    info = full_upload(cfg, share_url, title, description, privacy, keep_remote,
+                       log=click.echo)
     click.echo(f"Title: {resolve_title(title, info['filename'])}")
     click.echo(info["video_url"])
 

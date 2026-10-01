@@ -35,22 +35,32 @@ def full_upload(
     description: str = "",
     privacy: str | None = None,
     keep_remote: bool = False,
+    log=print,
 ) -> dict:
-    """Run the whole pipeline. Returns info dict with file/video_url."""
+    """Run the whole pipeline, logging each stage as it happens.
+
+    Download/upload progress streams live through `log`'s stdout.
+    Returns info dict with file/video_url.
+    """
     privacy = privacy or cfg.yt_privacy_default
     uploader = cfg.repo_root / "remote" / "remote_upload.py"
     if not uploader.exists():
         raise RuntimeError(f"Remote uploader not found: {uploader}")
 
+    log("[1/4] Extracting direct download link...")
     filename, ddl = sp.extract_ddl(share_url, cfg.must_state_path)
     filename = sanitize_filename(filename)
     video_title = resolve_title(title, filename)
+    log(f"      File: {filename}")
 
+    log("[2/4] Deploying bundle and downloading on VPS...")
     vps_mod.ensure_workdir(cfg)
     vps_mod.deploy_bundle(
         cfg, uploader, cfg.yt_client_secret_path, cfg.yt_token_path
     )
     remote_video = vps_mod.download_to_vps(cfg, ddl, filename)
+
+    log("[3/4] Uploading to YouTube from VPS...")
     # run_remote_upload provisions the venv itself (idempotent).
     video_url = vps_mod.run_remote_upload(
         cfg,
@@ -60,9 +70,14 @@ def full_upload(
         privacy=privacy,
         expected_channel_id=cfg.yt_channel_id,
     )
+
+    log("[4/4] Cleaning up VPS...")
     if not keep_remote:
         vps_mod.remove_remote(cfg, remote_video)
         vps_mod.remove_remote_venv(cfg)
+        log("      Remote video and uploader venv removed.")
+    else:
+        log("      Remote video and uploader venv kept.")
 
     return {
         "filename": filename,

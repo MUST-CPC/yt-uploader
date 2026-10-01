@@ -97,14 +97,26 @@ def upload_video(youtube, path, title, description, privacy):
             if status:
                 percent = int(status.progress() * 100)
                 if percent != last_percent:
-                    print(f"[UPLOAD] {percent}%", flush=True)
+                    uploaded = size * status.progress()
+                    # \r redraw: one live-updating line whether this runs on a
+                    # terminal or is streamed over ssh by the mustcpc CLI.
+                    print(
+                        f"\r[UPLOAD] {percent}% "
+                        f"({uploaded / 1024 / 1024:.1f} MB / "
+                        f"{size / 1024 / 1024:.1f} MB)",
+                        end="",
+                        flush=True,
+                    )
                     last_percent = percent
         except HttpError as e:
             if e.resp.status in (500, 502, 503, 504):
+                print()
                 print(f"[UPLOAD] Transient error {e.resp.status}, retrying in 5s...")
                 time.sleep(5)
                 continue
             raise
+
+    print()
 
     video_id = response["id"]
     url = f"https://youtu.be/{video_id}"

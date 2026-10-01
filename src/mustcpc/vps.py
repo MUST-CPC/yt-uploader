@@ -81,6 +81,79 @@ def ssh_cmd_string(cfg: Config, remote_cmd: str) -> str:
     )
 
 
+class LiveRenderer:
+    """Incrementally render a remote byte stream with progress-bar support.
+
+    `\\n`-terminated segments print as lines; `\\r`-terminated segments
+    (wget bars, uploader percent redraws) rewrite the current terminal line
+    so they animate instead of scrolling.
+    """
+
+    def __init__(self, out=None):
+        self.out = out if out is not None else sys.stdout
+        self.pending = ""
+        self.trailing_redraw = False
+
+    def feed(self, text: str) -> None:
+        self.pending += text
+        while True:
+            m = re.search(r"[\r\n]", self.pending)
+            if not m:
+                break
+            seg, term = self.pending[: m.start()], m.group()
+            self.pending = self.pending[m.end():]
+            if term == "\n":
+                self.out.write(seg + "\n")
+                self.trailing_redraw = False
+            else:
+                # Emulate the terminal: print the segment, then CR so the
+                # next segment overwrites it (progress-bar animation).
+                self.out.write(seg + "\r")
+                self.trailing_redraw = True
+            self.out.flush()
+
+    def finish(self) -> None:
+        if self.pending:
+            self.out.write(self.pending + "\n")
+            self.out.flush()
+        elif self.trailing_redraw:
+            # A progress line was left mid-line; end it cleanly.
+            self.out.write("\n")
+            self.out.flush()
+        self.trailing_redraw = False
+
+
+def run_live(cfg: Config, remote_cmd: str, check: bool = True) -> VPSResult:
+    """Run a command on the VPS, streaming stdout+stderr live. Returns output."""
+    problems = cfg.check_vps()
+    if problems:
+        raise RuntimeError("; ".join(problems) + ". Run `mustcpc config show`.")
+    proc = subprocess.Popen(
+        _ssh_prefix(cfg) + [remote_cmd],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        bufsize=0,
+    )
+    renderer = LiveRenderer()
+    decode = codecs.getincrementaldecoder("utf-8")(errors="replace")
+    collected: list[str] = []
+    assert proc.stdout is not None
+    while True:
+        chunk = proc.stdout.read(1024)
+        if not chunk:
+            break
+        text = decode.decode(chunk)
+        collected.append(text)
+        renderer.feed(text)
+    renderer.finish()
+    proc.wait()
+    full = "".join(collected)
+    res = VPSResult(proc.returncode, full.strip(), "")
+    if check and not res.ok:
+        raise RuntimeError(f"SSH command failed: {remote_cmd}\n{res.stdout[-2000:]}")
+    return res
+
+
 def ensure_workdir(cfg: Config) -> None:
     run(cfg, f"mkdir -p {shlex.quote(cfg.vps_workdir)}")
 
@@ -115,7 +188,7 @@ def ensure_remote_venv(cfg: Config, recreate: bool = False) -> None:
         f"{shlex.quote(cfg.vps_python)} -m venv {shlex.quote(venv)}; fi"
     )
     parts.append(f"{shlex.quote(vpy)} -m pip install -q -r {shlex.quote(req)}")
-    run(cfg, " && ".join(parts))
+    run_live(cfg, " && ".join(parts))
 
 
 def remove_remote_venv(cfg: Config) -> None:
@@ -139,7 +212,7 @@ def test_connection(cfg: Config) -> VPSResult:
 
 
 def download_to_vps(cfg: Config, ddl: str, filename: str) -> str:
-    """wget the DDL into the VPS workdir. Returns the remote file path."""
+    """wget the DDL into the VPS workdir, streaming progress. Returns remote path."""
     safe_dir = shlex.quote(cfg.vps_workdir)
     # --content-disposition keeps SharePoint's real filename; we then rename
     # to our sanitized filename for predictable later steps.
@@ -147,14 +220,17 @@ def download_to_vps(cfg: Config, ddl: str, filename: str) -> str:
     remote_final = f"{cfg.vps_workdir}/{filename}"
     run(cfg, f"mkdir -p {safe_dir}")
     # Use a temp file then move, so interrupted downloads never look complete.
+    # bar:force keeps wget's progress bar even without a remote tty; run_live
+    # renders its \r redraws as a live local bar.
     cmd = (
         f"rm -f {shlex.quote(remote_tmp)} && "
-        f"wget --content-disposition -O {shlex.quote(remote_tmp)} "
+        f"wget --progress=bar:force --content-disposition "
+        f"-O {shlex.quote(remote_tmp)} "
         f"{shlex.quote(ddl)} && "
         f"mv {shlex.quote(remote_tmp)} {shlex.quote(remote_final)} && "
         f"ls -la {shlex.quote(remote_final)}"
     )
-    run(cfg, cmd)
+    run_live(cfg, cmd)
     return remote_final
 
 
@@ -182,7 +258,7 @@ def run_remote_upload(
     privacy: str = "unlisted",
     expected_channel_id: str = "",
 ) -> str:
-    """Ensure the venv, then run the uploader on the VPS. Returns the video URL."""
+    """Ensure the venv, then stream the uploader on the VPS. Returns the video URL."""
     ensure_remote_venv(cfg)
     cmd = (
         f"cd {shlex.quote(cfg.vps_workdir)} && "
@@ -194,7 +270,7 @@ def run_remote_upload(
     )
     if expected_channel_id:
         cmd += f" --expected-channel-id {shlex.quote(expected_channel_id)}"
-    res = run(cfg, cmd)
+    res = run_live(cfg, cmd)
     # remote_upload.py prints the youtu.be link on its last line.
     for line in reversed(res.stdout.splitlines()):
         if "youtu.be/" in line or "youtube.com/watch" in line:
