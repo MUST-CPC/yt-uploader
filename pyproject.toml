@@ -1,0 +1,31 @@
+[project]
+name = "mustcpc-yt-upload"
+version = "0.1.0"
+description = "Extract a direct download link from a MUST SharePoint video link on your PC, download it on the VPS over SSH, and upload it to YouTube from there."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.1",
+    "requests>=2.31",
+    "google-auth>=2.30",
+    "google-auth-oauthlib>=1.2",
+    "google-api-python-client>=2.150",
+    "playwright>=1.44",
+    "python-dotenv>=1.0",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+mustcpc = "mustcpc.cli:main"
+
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
