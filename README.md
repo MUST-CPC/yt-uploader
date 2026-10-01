@@ -1,6 +1,6 @@
 # mustcpc-yt-upload
 
-Session recordings live on MUST's SharePoint. This tool gets them to the
+Session recordings live on MUST's SharePoint, this CLI tool gets them to the
 community YouTube channel without burning your home bandwidth and without
 the Entra ID app bureaucracy.
 

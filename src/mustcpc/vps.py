@@ -2,12 +2,19 @@
 
 Every function shells out to the `ssh`/`scp` binaries so your
 ~/.ssh/config, ssh-agent, and key files keep working as usual.
+
+Long-running commands (wget, pip, the uploader) stream their output live
+via run_live() so progress bars render as they happen instead of dumping
+everything at the end.
 """
 
 from __future__ import annotations
 
+import codecs
+import re
 import shlex
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
