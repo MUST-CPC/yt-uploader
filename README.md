@@ -48,7 +48,7 @@ mustcpc vps test          # SSH check + remote python deps check
 ## Everyday use
 
 ```bash
-# Full pipeline (DDL -> VPS download -> YouTube upload -> cleanup of video + venv)
+# Full pipeline with live progress (DDL -> VPS download bar -> YouTube upload % -> cleanup)
 mustcpc upload "<sharepoint-video-url>" --title "CPC Session 5 - Graphs" --privacy unlisted
 
 # Just print the DDL + wget command

@@ -39,7 +39,8 @@ mustcpc config show / mustcpc doctor
 ```
 
 SharePoint URL forms accepted: normal `:v:/s/...` sharing links and
-`_layouts/15/download.aspx?UniqueId=...` links.
+`_layouts/15/download.aspx?UniqueId=...` links. Download and upload progress
+streams live (wget bar, uploader percent) instead of dumping at the end.
 
 ## 3. VPS requirements
 
