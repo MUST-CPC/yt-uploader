@@ -1,0 +1,31 @@
+# --- secrets / credentials (NEVER commit) ---
+.env
+data/
+*.token.json
+*youtube-token.json
+*must-state.json
+client_secret*.json
+**/client_secret*.json
+must-profile/
+**/must-profile/
+
+# --- python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.venv*/
+dist/
+build/
+
+# --- project runtime ---
+*.mp4
+*.mkv
+*.webm
+downloads/
+
+# --- editors / os ---
+.vscode/
+.idea/
+.DS_Store
