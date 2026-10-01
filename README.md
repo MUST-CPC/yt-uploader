@@ -10,7 +10,7 @@ the Entra ID app bureaucracy.
   happen **on your PC** (home IP) via a real browser session.
 - The official Microsoft Graph/Entra route needs app registration, admin
   consent, and sometimes a credit card. Instead we reuse your browser
-  cookies to ask SharePoint for a **temporary direct download link (DDL)**.
+  cookies to ask SharePoint for a temporary DDL.
 - The VPS does the heavy lifting: it `wget`s the DDL and uploads to YouTube
   from there. Your PC only exchanges small API calls.
 
@@ -41,7 +41,7 @@ cp .env.example .env          # then fill in VPS_HOST, VPS_USER, YT_CHANNEL_ID
 
 ```bash
 mustcpc auth must-login   # browser opens, log in to MUST, press Enter
-mustcpc auth yt-login     # Google OAuth for the community channel, local only
+mustcpc auth yt-login     # Google OAuth for the community channel
 mustcpc vps test          # SSH check + remote python deps check
 ```
 
