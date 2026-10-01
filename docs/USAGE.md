@@ -28,7 +28,8 @@ mustcpc auth must-login [--start-url URL]   browser login, saves data/must-state
 mustcpc auth yt-login                       Google OAuth, saves data/youtube-token.json
 mustcpc auth status                          which local credentials exist
 mustcpc ddl URL [--json] [--no-wget]         print filename + DDL (+wget line)
-mustcpc vps test                              ssh + workdir + remote deps check
+mustcpc vps test                              ssh + workdir + uploader venv check
+mustcpc vps bootstrap [--recreate]            deploy bundle + build remote venv
 mustcpc vps push-auth                         scp token + secret + uploader to VPS
 mustcpc vps download URL [--filename N]       DDL then wget on the VPS
 mustcpc vps exec "CMD"                        debug: run anything on the VPS
@@ -43,11 +44,17 @@ SharePoint URL forms accepted: normal `:v:/s/...` sharing links and
 ## 3. VPS requirements
 
 - OpenSSH reachable from your PC with your key (`ssh user@host` works).
-- `wget`, `python3` on the VPS.
-- One-time: `python3 -m pip install google-api-python-client google-auth-oauthlib`
-  (`mustcpc vps test` tells you if this is missing).
-- Nothing else to maintain: every `upload`/`vps download` re-deploys
-  `remote_upload.py` plus fresh credentials into the workdir.
+- `wget` and `python3` **with the venv module** on the VPS
+  (`python3 -m venv --help` should work; on Debian/Ubuntu that may mean
+  installing `python3-venv` once via apt).
+- Nothing else to maintain: every `upload` auto-deploys `remote_upload.py` +
+  `requirements.txt` + fresh credentials, builds `.mustcpc-venv` inside the
+  workdir if missing, and pip-installs the uploader deps into it. After a
+  successful upload the video file **and** the venv are deleted, unless you
+  pass `--keep-remote` (keeps both, so the next upload skips the pip step).
+- `mustcpc vps bootstrap` does the deploy + venv build as a standalone step
+  (handy after wiping the workdir); `vps test` reports whether the venv is
+  ready without building it.
 
 ## 4. YouTube notes
 
@@ -67,8 +74,9 @@ SharePoint URL forms accepted: normal `:v:/s/...` sharing links and
 - **`mustcpc vps test` ssh fails**: check `.env` host/user/port/key, and that
   `ssh -i KEY user@host` works by hand. The CLI uses `BatchMode=yes`, so it
   never prompts for a password — use a key or ssh-agent.
-- **Remote `import googleapiclient` fails**: install the deps on the VPS
-  (section 3).
+- **Remote venv build fails**: the VPS needs `python3` with the venv module
+  (`python3-venv` on Debian/Ubuntu via apt). For a fresh start:
+  `mustcpc vps bootstrap --recreate`.
 - **Wrong YouTube channel**: you authed a personal account. Re-run
   `auth yt-login` with the community account and pick the right channel in
   the consent screen, then `vps push-auth`.

@@ -21,10 +21,11 @@ mustcpc auth must-login  (browser)
 mustcpc ddl "<share-url>" ── cookies ──> SharePoint API ──> DDL
 mustcpc upload "<share-url>"
         │── ssh: mkdir workdir
-        │── scp: remote_upload.py + youtube-token.json
+        │── scp: remote_upload.py + requirements.txt + youtube-token.json
         │── ssh: wget "DDL" ──> video file
-        └───── ssh: python3 remote_upload.py ──> youtu.be/...
-                (cleanup: rm video unless --keep-remote)
+        │── ssh: python -m venv .mustcpc-venv; pip install -r requirements.txt
+        └───── ssh: .mustcpc-venv/bin/python remote_upload.py ──> youtu.be/...
+                (cleanup: rm video + venv unless --keep-remote)
 ```
 
 ## Install
@@ -47,8 +48,8 @@ mustcpc vps test          # SSH check + remote python deps check
 ## Everyday use
 
 ```bash
-# Full pipeline (DDL -> VPS download -> YouTube upload -> cleanup)
-mustcpc upload "<sharepoint-video-url>" --title "CPC Session 5 - Graphs"
+# Full pipeline (DDL -> VPS download -> YouTube upload -> cleanup of video + venv)
+mustcpc upload "<sharepoint-video-url>" --title "CPC Session 5 - Graphs" --privacy unlisted
 
 # Just print the DDL + wget command
 mustcpc ddl "<sharepoint-video-url>"
