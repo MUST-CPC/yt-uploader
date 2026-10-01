@@ -4,8 +4,10 @@ Non-interactive: it only uses the youtube-token.json pushed from your PC.
 If the token is missing/expired it fails with a message telling you to run
 `mustcpc auth yt-login && mustcpc vps push-auth` locally.
 
-VPS requirements: python3 + google-api-python-client + google-auth-oauthlib.
-Install once with:  pip install google-api-python-client google-auth-oauthlib
+VPS requirements: python3 with the venv module + wget. The CLI creates
+a `.mustcpc-venv` inside the workdir and pip-installs
+remote/requirements.txt into it automatically (deleted after a successful
+upload unless --keep-remote is passed).
 """
 
 import argparse

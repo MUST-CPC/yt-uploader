@@ -179,20 +179,38 @@ def vps():
 @vps.command("test")
 @click.pass_context
 def vps_test(ctx):
-    """Test SSH and check the remote Python has uploader deps."""
+    """Test SSH and check the remote uploader venv."""
     cfg = _cfg(ctx.obj["env_file"])
     vps_mod.ensure_workdir(cfg)
     click.echo(f"[OK] SSH works, workdir ready: {cfg.vps_workdir}")
     res = vps_mod.test_connection(cfg)
     click.echo(f"[OK] Remote {res.stdout.splitlines()[0] if res.stdout else 'python found'}")
-    if "uploader-deps-ok" in res.stdout:
-        click.echo("[OK] Remote uploader deps installed (googleapiclient).")
+    venv = vps_mod.venv_ready(cfg)
+    if "uploader-deps-ok" in venv.stdout:
+        click.echo("[OK] Remote uploader venv ready.")
     else:
         click.echo(
-            "[!!] Remote is missing google-api-python-client. "
-            f"On the VPS run: {cfg.vps_python} -m pip install "
-            "google-api-python-client google-auth-oauthlib"
+            "[..] Remote uploader venv not set up yet. "
+            "Run `mustcpc vps bootstrap` once, or just `mustcpc upload` "
+            "(it provisions the venv automatically)."
         )
+
+
+@vps.command("bootstrap")
+@click.option(
+    "--recreate",
+    is_flag=True,
+    help="Delete the remote venv and build it from scratch.",
+)
+@click.pass_context
+def vps_bootstrap(ctx, recreate):
+    """Deploy the bundle and (re)build the remote uploader venv."""
+    cfg = _cfg(ctx.obj["env_file"])
+    uploader = cfg.repo_root / "remote" / "remote_upload.py"
+    vps_mod.deploy_bundle(cfg, uploader, cfg.yt_client_secret_path, cfg.yt_token_path)
+    click.echo(f"[OK] Bundle deployed to {cfg.vps_workdir}")
+    vps_mod.ensure_remote_venv(cfg, recreate=recreate)
+    click.echo("[OK] Remote uploader venv ready.")
 
 
 @vps.command("push-auth")
@@ -259,7 +277,7 @@ def vps_exec(ctx, command):
 @click.option(
     "--keep-remote",
     is_flag=True,
-    help="Keep the video file on the VPS after upload.",
+    help="Keep the video file and uploader venv on the VPS after upload.",
 )
 @click.pass_context
 def upload(ctx, share_url, title, description, privacy, keep_remote):
@@ -275,9 +293,9 @@ def upload(ctx, share_url, title, description, privacy, keep_remote):
     click.echo(f"[2/4] Downloaded on VPS: {info['remote_video']}")
     click.echo(f"[3/4] Uploaded: {info['video_url']}")
     click.echo(
-        "[4/4] Remote file removed."
+        "[4/4] Remote video and uploader venv removed."
         if not info["kept_remote"]
-        else "[4/4] Remote file kept."
+        else "[4/4] Remote video and uploader venv kept."
     )
     click.echo(f"Title: {resolve_title(title, info['filename'])}")
     click.echo(info["video_url"])

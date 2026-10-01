@@ -78,17 +78,57 @@ def ensure_workdir(cfg: Config) -> None:
     run(cfg, f"mkdir -p {shlex.quote(cfg.vps_workdir)}")
 
 
-def test_connection(cfg: Config) -> VPSResult:
-    """Check SSH works and report remote python version."""
-    run(cfg, "echo ok")
-    py = run(
+VENV_DIRNAME = ".mustcpc-venv"
+REMOTE_REQUIREMENTS_NAME = "requirements.txt"
+
+
+def venv_dir(cfg: Config) -> str:
+    return f"{cfg.vps_workdir}/{VENV_DIRNAME}"
+
+
+def venv_python(cfg: Config) -> str:
+    return f"{venv_dir(cfg)}/bin/python"
+
+
+def ensure_remote_venv(cfg: Config, recreate: bool = False) -> None:
+    """Create the uploader venv on the VPS if missing, install deps.
+
+    Idempotent: a second run only re-runs pip (fast when satisfied).
+    Requires deploy_bundle() to have copied requirements.txt first.
+    """
+    ensure_workdir(cfg)
+    venv = venv_dir(cfg)
+    vpy = venv_python(cfg)
+    req = f"{cfg.vps_workdir}/{REMOTE_REQUIREMENTS_NAME}"
+    parts = []
+    if recreate:
+        parts.append(f"rm -rf {shlex.quote(venv)}")
+    parts.append(
+        f"if [ ! -x {shlex.quote(vpy)} ]; then "
+        f"{shlex.quote(cfg.vps_python)} -m venv {shlex.quote(venv)}; fi"
+    )
+    parts.append(f"{shlex.quote(vpy)} -m pip install -q -r {shlex.quote(req)}")
+    run(cfg, " && ".join(parts))
+
+
+def remove_remote_venv(cfg: Config) -> None:
+    run(cfg, f"rm -rf {shlex.quote(venv_dir(cfg))}")
+
+
+def venv_ready(cfg: Config) -> VPSResult:
+    """Check the venv python exists and has the uploader deps (no raise)."""
+    return run(
         cfg,
-        f"{shlex.quote(cfg.vps_python)} --version && "
-        f"{shlex.quote(cfg.vps_python)} -c "
-        f"\"import googleapiclient; print('uploader-deps-ok')\"",
+        f"{shlex.quote(venv_python(cfg))} -c "
+        "\"import googleapiclient; print('uploader-deps-ok')\"",
         check=False,
     )
-    return py
+
+
+def test_connection(cfg: Config) -> VPSResult:
+    """Check SSH works and report the remote system python version (no raise)."""
+    run(cfg, "echo ok")
+    return run(cfg, f"{shlex.quote(cfg.vps_python)} --version", check=False)
 
 
 def download_to_vps(cfg: Config, ddl: str, filename: str) -> str:
@@ -114,9 +154,13 @@ def download_to_vps(cfg: Config, ddl: str, filename: str) -> str:
 def deploy_bundle(
     cfg: Config, uploader_script: str | Path, client_secret: str | Path, token: str | Path
 ) -> None:
-    """Push the remote uploader + YouTube credentials into the VPS workdir."""
+    """Push the remote uploader + requirements + credentials to the VPS workdir."""
     ensure_workdir(cfg)
+    requirements = cfg.repo_root / "remote" / REMOTE_REQUIREMENTS_NAME
+    if not requirements.exists():
+        raise RuntimeError(f"Remote requirements not found: {requirements}")
     scp_to(cfg, uploader_script, f"{cfg.vps_workdir}/remote_upload.py")
+    scp_to(cfg, requirements, f"{cfg.vps_workdir}/{REMOTE_REQUIREMENTS_NAME}")
     scp_to(cfg, client_secret, f"{cfg.vps_workdir}/client_secret.json")
     scp_to(cfg, token, f"{cfg.vps_workdir}/youtube-token.json")
     run(cfg, f"chmod 600 {shlex.quote(cfg.vps_workdir)}/client_secret.json "
@@ -131,10 +175,11 @@ def run_remote_upload(
     privacy: str = "unlisted",
     expected_channel_id: str = "",
 ) -> str:
-    """Execute the uploader on the VPS. Returns the YouTube video URL."""
+    """Ensure the venv, then run the uploader on the VPS. Returns the video URL."""
+    ensure_remote_venv(cfg)
     cmd = (
         f"cd {shlex.quote(cfg.vps_workdir)} && "
-        f"{shlex.quote(cfg.vps_python)} remote_upload.py "
+        f"{shlex.quote(venv_python(cfg))} remote_upload.py "
         f"{shlex.quote(remote_video)} "
         f"--title {shlex.quote(title)} "
         f"--description {shlex.quote(description)} "

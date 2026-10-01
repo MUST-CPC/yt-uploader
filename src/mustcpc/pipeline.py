@@ -51,6 +51,7 @@ def full_upload(
         cfg, uploader, cfg.yt_client_secret_path, cfg.yt_token_path
     )
     remote_video = vps_mod.download_to_vps(cfg, ddl, filename)
+    # run_remote_upload provisions the venv itself (idempotent).
     video_url = vps_mod.run_remote_upload(
         cfg,
         remote_video,
@@ -61,6 +62,7 @@ def full_upload(
     )
     if not keep_remote:
         vps_mod.remove_remote(cfg, remote_video)
+        vps_mod.remove_remote_venv(cfg)
 
     return {
         "filename": filename,

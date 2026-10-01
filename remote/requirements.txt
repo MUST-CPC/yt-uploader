@@ -1,0 +1,4 @@
+# Installed into an auto-created venv on the VPS by `mustcpc`
+# (see vps.ensure_remote_venv). Keep in sync with pyproject.toml.
+google-api-python-client>=2.150
+google-auth-oauthlib>=1.2
