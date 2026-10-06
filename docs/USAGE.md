@@ -62,6 +62,19 @@ before pressing Enter. Cookies belong to their SharePoint host; a session for
 `tenant.sharepoint.com` may need another login for `tenant-my.sharepoint.com`.
 The existing command names and environment variable names still apply.
 
+For a shared recording, start with the original `:v:` sharing link. A file GUID
+or path alone does not carry the sharing link's permission. The tool opens the
+sharing link, reads Stream's signed download URL, and saves any new access
+cookies. Subsequent Stream and `SourceUrl` links to that recording use the
+saved access.
+
+If the API returns 401 or 403, extraction tries the Stream viewer, then restores
+the saved Microsoft login with headless Chromium. Browser recovery blocks video
+and background data requests. It refreshes `MUSTCPC_MUST_STATE_FILE` after
+successful extraction. Install Chromium with `playwright install chromium` if
+it is missing. If login or download permission is still unavailable, the CLI
+reports the required action without a traceback.
+
 ## 3. VPS requirements
 
 - OpenSSH reachable from your PC with your key (`ssh user@host` works).
@@ -93,6 +106,10 @@ The existing command names and environment variable names still apply.
 - **SharePoint 401/403 on DDL**: log in to the video's host with
   `auth must-login --start-url "<sharepoint-video-url>"`. Check that your account
   can read the recording. MUST blocks cloud IPs, so log in from your PC.
+- **Shared recording opens but a Stream or download link fails**: use its
+  original `:v:` sharing link once to save access, then retry. Access to the
+  MUST CPC host does not automatically grant access to a personal OneDrive
+  recording. Download restrictions still apply.
 - **`mustcpc vps test` ssh fails**: check `.env` host/user/port/key, and that
   `ssh -i KEY user@host` works by hand. The CLI uses `BatchMode=yes`, so it
   never prompts for a password — use a key or ssh-agent.

@@ -296,7 +296,11 @@ def upload(ctx, share_url, title, description, privacy, keep_remote):
 
 
 def main():
-    cli()
+    try:
+        cli()
+    except sp.SharePointAccessError as exc:
+        click.ClickException(str(exc)).show()
+        raise SystemExit(1) from None
 
 
 if __name__ == "__main__":

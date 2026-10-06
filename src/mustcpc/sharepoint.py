@@ -10,11 +10,17 @@ from __future__ import annotations
 import base64
 import binascii
 import json
+import re
+import shlex
 import uuid
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote, urlparse
 
 import requests
+
+
+class SharePointAccessError(RuntimeError):
+    """The saved login cannot access or download the requested recording."""
 
 
 def parse_video_url(video_url: str) -> tuple[str, str]:
@@ -225,9 +231,151 @@ def extract_ddl(video_url: str, state_file: str | Path) -> tuple[str, str]:
     """
     site, file_reference = parse_video_url(video_url)
     session = load_session(state_file)
+    try:
+        path = urlparse(video_url).path
+        if path.startswith("/:v:") and not path.startswith("/:v:/r/"):
+            # Visiting the original link preserves its file-specific permission
+            # and lets SharePoint establish cookies on the OneDrive host.
+            return _extract_from_viewer(session, video_url, state_file)
+        try:
+            return _extract_with_api(session, site, file_reference)
+        except requests.HTTPError as exc:
+            if exc.response.status_code not in (401, 403):
+                raise
+            key = "id" if file_reference.startswith("/") else "sourcedoc"
+            viewer_url = f"{site}/_layouts/15/stream.aspx?{key}={quote(file_reference, safe='')}"
+            return _extract_from_viewer(session, viewer_url, state_file)
+    finally:
+        session.close()
+
+
+def _extract_with_api(
+    session: requests.Session, site: str, file_reference: str
+) -> tuple[str, str]:
     name, file_path, library_path = get_file_info(session, site, file_reference)
     drive_id = find_drive(session, site, library_path)
     return name, get_download_url(session, site, drive_id, file_path, library_path)
+
+
+def _viewer_download(file_info: dict) -> tuple[str, str] | None:
+    """Read Stream's signed URL; downloadUrlNoAuth still needs browser cookies."""
+    if file_info.get("isDownloadBlocked"):
+        raise SharePointAccessError(
+            "SharePoint has disabled downloads for this recording in the current session. "
+            "If it was shared with you, try the original :v: sharing link to establish "
+            "its access, or log in to the video's host with an account allowed to download it."
+        )
+    name = file_info.get("name")
+    url = file_info.get("downloadUrl")
+    if isinstance(name, str) and name and isinstance(url, str) and url:
+        if urlparse(url).scheme == "https" and urlparse(url).hostname:
+            return name, url
+    return None
+
+
+def _save_session_cookies(session: requests.Session, state_file: str | Path) -> None:
+    """Keep cookies issued while opening a share link, preserving other login state."""
+    path = Path(state_file)
+    state = json.loads(path.read_text(encoding="utf-8"))
+    cookies = {
+        (cookie["name"], cookie["domain"], cookie["path"]): cookie
+        for cookie in state.get("cookies", [])
+    }
+    for cookie in session.cookies:
+        key = (cookie.name, cookie.domain, cookie.path)
+        if key in cookies and cookies[key]["value"] == cookie.value:
+            continue
+        cookies[key] = {
+            "name": cookie.name,
+            "value": cookie.value,
+            "domain": cookie.domain,
+            "path": cookie.path,
+            "expires": cookie.expires if cookie.expires is not None else -1,
+            "httpOnly": cookie.has_nonstandard_attr("HttpOnly"),
+            "secure": cookie.secure,
+            "sameSite": cookie.get_nonstandard_attr("SameSite", "Lax"),
+        }
+    state["cookies"] = list(cookies.values())
+    path.write_text(json.dumps(state), encoding="utf-8")
+
+
+def _extract_from_viewer(
+    session: requests.Session, viewer_url: str, state_file: str | Path
+) -> tuple[str, str]:
+    response = session.get(viewer_url, headers={"Accept": "text/html"}, timeout=30)
+    if response.status_code not in (401, 403):
+        response.raise_for_status()
+        if urlparse(response.url).hostname == urlparse(viewer_url).hostname:
+            match = re.search(r"\bvar\s+g_fileInfo\s*=\s*", response.text)
+            if match:
+                try:
+                    data, _ = json.JSONDecoder().raw_decode(response.text[match.end():])
+                except ValueError:
+                    data = {}
+                if isinstance(data, dict):
+                    result = _viewer_download(data)
+                    if result:
+                        _save_session_cookies(session, state_file)
+                        return result
+            if urlparse(viewer_url).path.startswith("/:v:"):
+                try:
+                    result = _extract_with_api(session, *parse_video_url(viewer_url))
+                except requests.HTTPError as exc:
+                    if exc.response.status_code not in (401, 403):
+                        raise
+                else:
+                    _save_session_cookies(session, state_file)
+                    return result
+    return _extract_with_browser(viewer_url, state_file)
+
+
+def _extract_with_browser(viewer_url: str, state_file: str | Path) -> tuple[str, str]:
+    """Restore Microsoft SSO on another host without fetching the video."""
+    from playwright.sync_api import Error, sync_playwright
+
+    login_hint = (
+        "The saved session could not open this recording. Run "
+        f"`mustcpc auth must-login --start-url {shlex.quote(viewer_url)}` "
+        "with an account that can access it, then retry."
+    )
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(headless=True)
+            try:
+                context = browser.new_context(storage_state=str(state_file))
+
+                def block_video(route):
+                    request_url = urlparse(route.request.url)
+                    path = request_url.path.lower()
+                    if (
+                        route.request.resource_type in {"media", "image", "font"}
+                        or path.endswith(("/content", "/download.aspx"))
+                        or (
+                            route.request.resource_type in {"fetch", "xhr"}
+                            and not (request_url.hostname or "").endswith(".microsoftonline.com")
+                        )
+                    ):
+                        route.abort()
+                    else:
+                        route.continue_()
+
+                context.route("**/*", block_video)
+                page = context.new_page()
+                page.goto(viewer_url, wait_until="domcontentloaded", timeout=30000)
+                page.wait_for_function("!!window.g_fileInfo", timeout=15000)
+                if urlparse(page.url).hostname != urlparse(viewer_url).hostname:
+                    raise SharePointAccessError(login_hint)
+                result = _viewer_download(page.evaluate("window.g_fileInfo"))
+                if not result:
+                    raise SharePointAccessError(login_hint)
+                context.storage_state(path=str(state_file))
+                return result
+            finally:
+                browser.close()
+    except Error as exc:
+        raise SharePointAccessError(
+            login_hint + " If Chromium is missing, run `playwright install chromium`."
+        ) from exc
 
 
 def must_login(profile_dir: str | Path, state_file: str | Path, start_url: str) -> Path:

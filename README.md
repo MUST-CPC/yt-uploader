@@ -49,7 +49,7 @@ mustcpc upload "<share-url>"
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
-playwright install chromium   # only needed for `auth must-login`
+playwright install chromium   # browser login and automatic session recovery
 cp .env.example .env          # then fill in VPS_HOST, VPS_USER, YT_CHANNEL_ID
 ```
 
@@ -75,6 +75,12 @@ mustcpc ddl "<sharepoint-video-url>"
 The command name and `MUSTCPC_MUST_*` settings remain the same. Download links
 with `SourceUrl`, including personal meeting recordings, work with `ddl`,
 `vps download`, and `upload`.
+
+For a recording shared with you, use its original `:v:` sharing link first.
+The tool opens that link and saves the access cookies for its OneDrive host.
+You can then use the same recording's Stream `stream.aspx?id=...` link or
+`download.aspx?SourceUrl=...` link. Extraction restores the saved browser login
+automatically if the API needs authentication on another host.
 
 ```bash
 # Full pipeline with live progress (DDL -> VPS download bar -> YouTube upload % -> cleanup)
