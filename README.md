@@ -1,8 +1,9 @@
 # mustcpc-yt-upload
 
-Session recordings live on MUST's SharePoint, this CLI tool gets them to the
-community YouTube channel without burning your home bandwidth and without
-the Entra ID app bureaucracy.
+This CLI transfers recordings from SharePoint Online or OneDrive for Business
+to YouTube through your VPS, without using your home connection for video data
+or requiring Entra ID app registration. It accepts any `*.sharepoint.com`
+tenant, including personal `*-my.sharepoint.com` sites.
 
 ## How it works
 
@@ -14,7 +15,7 @@ mustcpc upload "<sharepoint-video-url>" --title "CPC Session 5 - Graphs"
 ```
 
 That command extracts a temporary direct download link (DDL) using your
-saved MUST browser session, then drives the VPS over SSH: it downloads the
+saved SharePoint browser session, then drives the VPS over SSH: it downloads the
 video there, uploads it to the community YouTube channel from there, and
 deletes the remote files afterwards. Progress for each step streams live in
 your terminal. Your local internet never touches the video bytes.
@@ -61,6 +62,19 @@ mustcpc vps test          # SSH check + remote python deps check
 ```
 
 ## Everyday use
+
+For another SharePoint tenant or a personal OneDrive site, first save a login
+for that host. Open the video with an account that has permission to read it,
+then press Enter in the terminal:
+
+```bash
+mustcpc auth must-login --start-url "<sharepoint-video-url>"
+mustcpc ddl "<sharepoint-video-url>"
+```
+
+The command name and `MUSTCPC_MUST_*` settings remain the same. Download links
+with `SourceUrl`, including personal meeting recordings, work with `ddl`,
+`vps download`, and `upload`.
 
 ```bash
 # Full pipeline with live progress (DDL -> VPS download bar -> YouTube upload % -> cleanup)

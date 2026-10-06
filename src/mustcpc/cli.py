@@ -94,14 +94,14 @@ def doctor(ctx):
 
 @cli.group()
 def auth():
-    """Log in to SharePoint (MUST) and YouTube."""
+    """Log in to SharePoint and YouTube."""
 
 
 @auth.command("must-login")
-@click.option("--start-url", default=None, help="Override the SharePoint start page.")
+@click.option("--start-url", default=None, help="SharePoint site or OneDrive video URL to log in to.")
 @click.pass_context
 def auth_must_login(ctx, start_url):
-    """Browser login to MUST, saves session for DDL extraction."""
+    """Browser login to SharePoint/OneDrive, saves session for DDL extraction."""
     cfg = _cfg(ctx.obj["env_file"])
     cfg.must_profile_path.mkdir(parents=True, exist_ok=True)
     click.echo(f"Profile: {cfg.must_profile_path}")

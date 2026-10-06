@@ -38,9 +38,29 @@ mustcpc upload URL --title T [--description D]
 mustcpc config show / mustcpc doctor
 ```
 
-SharePoint URL forms accepted: normal `:v:/s/...` sharing links and
-`_layouts/15/download.aspx?UniqueId=...` links. Download and upload progress
-streams live (wget bar, uploader percent) instead of dumping at the end.
+Accepted SharePoint Online URL forms, across `*.sharepoint.com` tenants:
+
+- Team-site sharing links: `:v:/s/<SITE>/<TOKEN>` and `:v:/t/<TEAM>/<TOKEN>`.
+- Personal OneDrive sharing links: `:v:/g/personal/<OWNER>/<TOKEN>`.
+- Download links with `UniqueId=<GUID>` or `SourceUrl=<file-url>`.
+- Viewer links with `id=<server-relative-file-path>` or `sourcedoc=<GUID>`.
+- Direct video file URLs and `:v:/r/...` file links.
+
+Sites under `/sites/`, `/teams/`, and `/personal/`, plus root sites, are
+supported. Download and upload progress streams live in the terminal.
+
+For a different tenant or personal OneDrive host, save a session on that host:
+
+```bash
+mustcpc auth must-login --start-url "<sharepoint-video-url>"
+mustcpc ddl "<sharepoint-video-url>"
+mustcpc vps download "<sharepoint-video-url>"
+```
+
+Log in with an account that can access the recording and wait until it opens
+before pressing Enter. Cookies belong to their SharePoint host; a session for
+`tenant.sharepoint.com` may need another login for `tenant-my.sharepoint.com`.
+The existing command names and environment variable names still apply.
 
 ## 3. VPS requirements
 
@@ -70,8 +90,9 @@ streams live (wget bar, uploader percent) instead of dumping at the end.
 
 ## 5. Troubleshooting
 
-- **SharePoint 401/403 on DDL**: cookies expired. Re-run `auth must-login`.
-  Must log in from your home IP — cloud IPs are blocked by MUST.
+- **SharePoint 401/403 on DDL**: log in to the video's host with
+  `auth must-login --start-url "<sharepoint-video-url>"`. Check that your account
+  can read the recording. MUST blocks cloud IPs, so log in from your PC.
 - **`mustcpc vps test` ssh fails**: check `.env` host/user/port/key, and that
   `ssh -i KEY user@host` works by hand. The CLI uses `BatchMode=yes`, so it
   never prompts for a password — use a key or ssh-agent.
